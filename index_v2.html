@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Memento Mori Grid</title>
+    <style>
+        :root {
+            --bg-color: #000000;
+            --text-main: #ffffff;
+            --text-sub: #888888;
+            --past-color: #1a1a1a;
+            --future-color: #00ff41; /* 命の輝き：鮮やかなグリーン */
+            --accent-color: #00ff41;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: env(safe-area-inset-top) 20px 40px;
+            overflow-x: hidden;
+            overflow-y: auto; /* グリッドが画面に収まらない場合はスクロール可能にする */
+        }
+
+        /* Header Stats */
+        .header {
+            text-align: center;
+            margin-top: 40px;
+            margin-bottom: 30px;
+            width: 100%;
+        }
+
+        .remaining-weeks {
+            font-size: 3rem;
+            font-weight: 800;
+            letter-spacing: -2px;
+            margin-bottom: 5px;
+        }
+
+        .today-progress {
+            font-size: 1.2rem;
+            color: var(--text-sub);
+            font-variant-numeric: tabular-nums;
+            margin-top: 20px;
+        }
+
+        /* ライフ・リング (円形プログレスバー) のスタイル */
+        .progress-ring {
+            width: 150px;
+            height: 150px;
+            margin: 20px auto 30px;
+            position: relative;
+        }
+
+        .progress-ring svg {
+            transform: rotate(-90deg);
+            display: block;
+        }
+
+        .ring-background {
+            stroke: #222222; /* より暗い背景色 */
+            stroke-width: 10;
+            fill: transparent;
+        }
+
+        .ring-progress {
+            stroke: var(--future-color);
+            stroke-width: 10;
+            fill: transparent;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.5s linear;
+        }
+
+        .progress-ring-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--future-color);
+        }
+
+        /* Life Grid */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(52, 1fr);
+            gap: 2px;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .cell {
+            aspect-ratio: 1 / 1;
+            border-radius: 1px;
+            background-color: var(--past-color);
+        }
+
+        .cell.future {
+            background-color: var(--future-color);
+            opacity: 0.8;
+        }
+
+        .cell.current {
+            background-color: var(--text-main);
+            box-shadow: 0 0 10px var(--accent-color);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+
+        /* Modal */
+        #setup-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+
+        .modal-content {
+            background: #111;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            border: 1px solid #333;
+            max-width: 90%;
+        }
+
+        input[type="date"] {
+            background: #222;
+            border: 1px solid #444;
+            color: white;
+            padding: 15px;
+            font-size: 1.2rem;
+            border-radius: 10px;
+            margin: 20px 0;
+            width: 100%;
+            outline: none;
+        }
+
+        button {
+            background: var(--text-main);
+            color: black;
+            border: none;
+            padding: 15px 30px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        button:active { transform: scale(0.95); }
+
+        .hidden { display: none !important; }
+
+        /* Responsive grid adjustments */
+        /* タブレット向け */
+        @media (min-width: 601px) and (max-width: 1024px) {
+            .grid-container { 
+                grid-template-columns: repeat(26, 1fr); 
+                max-width: 700px;
+            }
+        }
+        
+        /* スマホ向け（一画面に収まりやすくするため、列数を13に減らす） */
+        @media (max-width: 600px) {
+            .grid-container { 
+                grid-template-columns: repeat(13, 1fr); 
+                gap: 1px; 
+            }
+            .remaining-weeks { font-size: 2.2rem; }
+            
+            .progress-ring {
+                width: 120px;
+                height: 120px;
+            }
+            
+            body {
+                padding: env(safe-area-inset-top) 10px 40px; /* パディングを狭める */
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="setup-modal" class="hidden">
+        <div class="modal-content">
+            <h2>Your Birthdate</h2>
+            <p style="color: var(--text-sub); margin-top: 10px;">人生を可視化しましょう</p>
+            <input type="date" id="birth-input">
+            <button onclick="saveBirthdate()">Start Life</button>
+        </div>
+    </div>
+
+    <div class="header">
+        <div class="remaining-weeks" id="weeks-display">----</div>
+        <div style="color: var(--text-sub); margin-bottom: 20px;">Weeks Remaining</div>
+
+        <div class="progress-ring">
+            <svg viewBox="0 0 36 36">
+                <circle class="ring-background" cx="18" cy="18" r="16" />
+                <circle class="ring-progress" id="life-ring-progress" cx="18" cy="18" r="16" />
+            </svg>
+            <div class="progress-ring-text" id="life-progress-percent">0%</div>
+        </div>
+        <div class="today-progress" id="today-display">Today: 00.000000%</div>
+    </div>
+
+    <div class="grid-container" id="grid"></div>
+
+    <script>
+        const LIFESPAN_YEARS = 85;
+        const TOTAL_WEEKS = LIFESPAN_YEARS * 52;
+        
+        let birthDate = localStorage.getItem('birthDate');
+        const modal = document.getElementById('setup-modal');
+
+        function init() {
+            // モーダルのチラつき防止
+            modal.classList.add('hidden'); 
+
+            if (!birthDate) {
+                // 生年月日がなければ、モーダルを表示
+                modal.classList.remove('hidden');
+            } else {
+                // 生年月日があれば、即座にレンダリング開始
+                render();
+                updateLiveStats();
+                setInterval(updateLiveStats, 50);
+            }
+        }
+
+        function saveBirthdate() {
+            const val = document.getElementById('birth-input').value;
+            if (val) {
+                localStorage.setItem('birthDate', val);
+                birthDate = val;
+                // モーダルを閉じる
+                modal.classList.add('hidden'); 
+                render();
+                updateLiveStats();
+                setInterval(updateLiveStats, 50);
+            }
+        }
+
+        function render() {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            
+            const birth = new Date(birthDate);
+            const now = new Date();
+            const diffWeeks = Math.floor((now - birth) / (1000 * 60 * 60 * 24 * 7));
+            const remaining = TOTAL_WEEKS - diffWeeks;
+
+            // 1. カウントダウン更新
+            document.getElementById('weeks-display').textContent = remaining.toLocaleString();
+
+            // 2. ライフ・リングの更新
+            const progressRatio = diffWeeks / TOTAL_WEEKS; // 経過した時間の割合
+            const percent = (progressRatio * 100).toFixed(1);
+
+            const circumference = 2 * Math.PI * 16;
+            // 残り時間の割合に応じてリングを描画
+            const remainingRatio = 1 - progressRatio;
+            const offset = remainingRatio * circumference; 
+
+            document.getElementById('life-ring-progress').style.strokeDasharray = `${circumference} ${circumference}`;
+            document.getElementById('life-ring-progress').style.strokeDashoffset = offset;
+            
+            // 残り時間のパーセンテージ表示
+            document.getElementById('life-progress-percent').textContent = `${(remainingRatio * 100).toFixed(1)}%`;
+            
+            // 3. グリッドの更新
+            const fragment = document.createDocumentFragment();
+            for (let i = 0; i < TOTAL_WEEKS; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                if (i < diffWeeks) {
+                    cell.classList.add('past');
+                } else if (i === diffWeeks) {
+                    cell.classList.add('current');
+                } else {
+                    cell.classList.add('future');
+                }
+                fragment.appendChild(cell);
+            }
+            grid.appendChild(fragment);
+        }
+
+        function updateLiveStats() {
+            const now = new Date();
+            const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const secondsPassed = (now - startOfDay) / 1000;
+            const dayPercent = (secondsPassed / 86400) * 100;
+            
+            // 残り時間を表示するため、100%から経過時間を引く
+            const dayRemainingPercent = 100 - dayPercent;
+            
+            document.getElementById('today-display').textContent = `Today: ${dayRemainingPercent.toFixed(6)}% Remaining`;
+        }
+
+        init();
+    </script>
+</body>
+</html>
